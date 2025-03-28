@@ -1096,14 +1096,22 @@ impl Encodable for DhcpOption {
             O::ClasslessStaticRoute(routes) => {
                 let mut buf = Vec::new();
                 let mut route_enc = Encoder::new(&mut buf);
+
                 for (dest, gw) in routes {
                     let byte_len = dest.prefix_len().div_ceil(8);
+                    if route_enc.len_filled() + 1 + byte_len as usize + 4 > u8::MAX as usize {
+                        encode_long_opt_bytes(code, route_enc.buffer_filled(), e)?;
+                        route_enc = Encoder::new(&mut buf);
+                    }
+
                     route_enc.write_u8(dest.prefix_len())?;
                     route_enc.write_slice(&dest.addr().octets()[0..byte_len as usize])?;
                     route_enc.write(gw.octets())?;
                 }
 
-                encode_long_opt_bytes(code, &buf, e)?;
+                if route_enc.len_filled() > 0 {
+                    encode_long_opt_bytes(code, route_enc.buffer_filled(), e)?;
+                }
             }
             O::PathMtuPlateauTable(nums) => {
                 encode_long_opt_chunks(code, 2, nums, |num, e| e.write_u16(*num), e)?;
